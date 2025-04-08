@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Daily Forecast</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+    }
+    img {
+      max-width: 90%;
+      height: auto;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    }
+    .date {
+      font-size: 1.2em;
+      margin: 1em 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Daily Forecast</h1>
+  <div class="date">Forecast for <span id="date"></span></div>
+  <img src="latest.png" alt="Latest Forecast" />
+
+  <script>
+    // Show today's date
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById("date").textContent = today;
+  </script>
+</body>
+</html>
