@@ -48,7 +48,6 @@
   <script src="meta.js"></script>
   <script>
     const imgEl = document.getElementById("forecast-img");
-    const dateEl = document.getElementById("date");
     const leadSelect = document.getElementById("lead-select");
 
     // Display current UTC time
@@ -62,7 +61,6 @@
       // Update forecast time and base cycle info
       const forecastDateStr = `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6)} ${cycle}:00`;
       document.getElementById("forecast-time").textContent = forecastDateStr;
-      dateEl.textContent = `${date} ${cycle}`;
 
       // Populate dropdown
       leads.forEach(lead => {
