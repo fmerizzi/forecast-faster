@@ -53,9 +53,8 @@
     const leadSelect = document.getElementById("lead-select");
 
     // Display current UTC time
-    const now = new Date();
-    const nowUtc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
-    document.getElementById("current-time").textContent = nowUtc.toISOString().slice(0, 16).replace("T", " ");
+    const nowUtc = new Date().toISOString().slice(0, 16).replace("T", " ");
+    document.getElementById("current-time").textContent = nowUtc;
 
     // Load forecast metadata if available
     if (typeof forecastMeta !== 'undefined') {
