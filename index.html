@@ -25,15 +25,25 @@
       padding: 0.3em 0.6em;
       margin-bottom: 1em;
     }
+    .meta-info {
+      margin-bottom: 1em;
+      font-size: 0.95em;
+      color: #555;
+    }
   </style>
 </head>
 <body>
-  <h1>Daily Forecast</h1>
+  <h1>Wind speed 5km forecast</h1>
   <div class="date">Forecast for <span id="date"></span> UTC</div>
   <label for="lead-select">Lead time:</label>
   <select id="lead-select"></select>
   <br />
   <img id="forecast-img" src="" alt="Forecast Image" />
+
+  <div class="meta-info">
+  <p><strong>Current time:</strong> <span id="current-time"></span> UTC</p>
+  <p><strong>Last forecast issued at:</strong> <span id="forecast-time"></span> UTC</p>
+  </div>
 
   <!-- Load metadata -->
   <script src="meta.js"></script>
@@ -42,15 +52,25 @@
     const dateEl = document.getElementById("date");
     const leadSelect = document.getElementById("lead-select");
 
+    // Display current UTC time
+    const now = new Date();
+    const nowUtc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+    document.getElementById("current-time").textContent = nowUtc.toISOString().slice(0, 16).replace("T", " ");
+
+    // Load forecast metadata if available
     if (typeof forecastMeta !== 'undefined') {
       const { date, cycle, leads, files } = forecastMeta;
+
+      // Update forecast time and base cycle info
+      const forecastDateStr = `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6)} ${cycle}:00`;
+      document.getElementById("forecast-time").textContent = forecastDateStr;
       dateEl.textContent = `${date} ${cycle}`;
 
       // Populate dropdown
       leads.forEach(lead => {
         const option = document.createElement("option");
         option.value = lead;
-        option.textContent = `+${lead.slice(1)}h`;
+        option.textContent = `+${parseInt(lead.slice(1), 10)}h`;
         leadSelect.appendChild(option);
       });
 
@@ -63,10 +83,13 @@
         const selectedLead = leadSelect.value;
         imgEl.src = files[selectedLead];
       });
+
     } else {
       dateEl.textContent = "Unknown";
+      document.getElementById("forecast-time").textContent = "Unknown";
       imgEl.alt = "Forecast image not available";
     }
   </script>
+
 </body>
 </html>
