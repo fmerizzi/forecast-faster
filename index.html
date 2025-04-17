@@ -20,25 +20,49 @@
       font-size: 1.2em;
       margin: 1em 0;
     }
+    select {
+      font-size: 1em;
+      padding: 0.3em 0.6em;
+      margin-bottom: 1em;
+    }
   </style>
 </head>
 <body>
   <h1>Daily Forecast</h1>
   <div class="date">Forecast for <span id="date"></span> UTC</div>
-  <img id="forecast-img" src="" alt="Latest Forecast" />
+  <label for="lead-select">Lead time:</label>
+  <select id="lead-select"></select>
+  <br />
+  <img id="forecast-img" src="" alt="Forecast Image" />
 
   <!-- Load metadata -->
   <script src="meta.js"></script>
   <script>
-    // Update date and image dynamically
     const imgEl = document.getElementById("forecast-img");
     const dateEl = document.getElementById("date");
+    const leadSelect = document.getElementById("lead-select");
 
     if (typeof forecastMeta !== 'undefined') {
-      const { date, cycle } = forecastMeta;
-      const filename = `${date}_${cycle}.png`;
-      imgEl.src = filename;
+      const { date, cycle, leads, files } = forecastMeta;
       dateEl.textContent = `${date} ${cycle}`;
+
+      // Populate dropdown
+      leads.forEach(lead => {
+        const option = document.createElement("option");
+        option.value = lead;
+        option.textContent = `+${lead.slice(1)}h`;
+        leadSelect.appendChild(option);
+      });
+
+      // Show initial image (default to first lead)
+      const initialLead = leads[0];
+      imgEl.src = files[initialLead];
+
+      // Change image on lead time change
+      leadSelect.addEventListener("change", () => {
+        const selectedLead = leadSelect.value;
+        imgEl.src = files[selectedLead];
+      });
     } else {
       dateEl.textContent = "Unknown";
       imgEl.alt = "Forecast image not available";
