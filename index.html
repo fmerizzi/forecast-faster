@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wind speed forecast</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column;
+    }
+    header {
+      padding: 0.6em 1em; background: #10243e; color: #fff;
+    }
+    .header-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1em; }
+    .brand { font-size: 1.6em; font-weight: 300; margin: 0; letter-spacing: 0.02em; justify-self: center; }
+    .tagline { font-size: 0.85em; color: #b9c7d8; margin: 0; justify-self: start; }
+    .meta-info { font-size: 0.85em; color: #b9c7d8; margin: 0; justify-self: end; white-space: nowrap; }
+    .controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 1em;
+      padding: 0.5em 1em; background: #1d3a5f; color: #fff; font-size: 0.9em;
+    }
+    .controls label { display: flex; align-items: center; gap: 0.4em; }
+    select { font-size: 0.95em; padding: 0.25em 0.5em; }
+    .source-toggle { display: inline-flex; border: 1px solid #4a6a94; border-radius: 6px; overflow: hidden; }
+    .source-toggle button {
+      font-size: 0.95em; padding: 0.28em 0.8em; background: #16324f; color: #b9c7d8;
+      border: 0; cursor: pointer;
+    }
+    .source-toggle button + button { border-left: 1px solid #4a6a94; }
+    .source-toggle button.active { background: #2f6fb0; color: #fff; }
+    #map { flex: 1; width: 100%; background: #0b1a2e; }
+    footer {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 1.5em;
+      padding: 0.5em 1em; background: #10243e; color: #fff; font-size: 0.85em;
+    }
+    .colorbar-wrap { display: flex; align-items: center; gap: 0.5em; }
+    #colorbar { border: 1px solid #456; }
+    .cb-labels { display: flex; justify-content: space-between; font-size: 0.75em; color: #b9c7d8; }
+    #status { color: #ffd27f; }
+    .osm-gray { filter: grayscale(1) contrast(0.95) brightness(1.08); }
+    @media (max-width: 768px) {
+      header { padding: 0.5em 0.8em; }
+      .header-row { grid-template-columns: 1fr; text-align: center; gap: 0.2em; }
+      .brand { font-size: 1.35em; order: -1; }
+      .tagline { font-size: 0.8em; }
+      .meta-info { font-size: 0.8em; white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <span class="tagline">5km diffusion powered wind downscaling</span>
+      <h1 class="brand">fasterweather</h1>
+      <span class="meta-info">
+        <strong>Now:</strong> <span id="current-time"></span> UTC &nbsp;·&nbsp;
+        <strong>Issued:</strong> <span id="forecast-time"></span> UTC
+      </span>
+    </div>
+  </header>
+
+  <div class="controls">
+    <label>Lead time
+      <select id="lead-select"></select>
+    </label>
+    <div class="source-toggle" role="group" aria-label="Wind source">
+      <button id="src-hr" class="active">5km</button>
+      <button id="src-gfs">GFS</button>
+    </div>
+    <label>Opacity
+      <input type="range" id="opacity" min="0.2" max="1" step="0.05" value="0.75" />
+    </label>
+    <span id="status"></span>
+  </div>
+
+  <div id="map"></div>
+
+  <footer>
+    <div class="colorbar-wrap">
+      <canvas id="colorbar" width="220" height="14"></canvas>
+      <div>
+        <div class="cb-labels"><span>0</span><span>10</span><span>20</span><span>30+ m/s</span></div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="meta.js"></script>
+  <script>
+    const COLOR_MAX = 30; // m/s top of the color scale
+    const COLOR_STOPS = [
+      [0.00, [4, 44, 110]],
+      [0.15, [33, 120, 190]],
+      [0.32, [56, 178, 196]],
+      [0.50, [120, 205, 130]],
+      [0.66, [250, 205, 60]],
+      [0.82, [245, 130, 50]],
+      [1.00, [206, 32, 32]],
+    ];
+
+    function colorFor(value) {
+      let t = Math.max(0, Math.min(1, value / COLOR_MAX));
+      for (let i = 1; i < COLOR_STOPS.length; i++) {
+        if (t <= COLOR_STOPS[i][0]) {
+          const [t0, c0] = COLOR_STOPS[i - 1];
+          const [t1, c1] = COLOR_STOPS[i];
+          const f = (t - t0) / (t1 - t0);
+          return [
+            Math.round(c0[0] + f * (c1[0] - c0[0])),
+            Math.round(c0[1] + f * (c1[1] - c0[1])),
+            Math.round(c0[2] + f * (c1[2] - c0[2])),
+          ];
+        }
+      }
+      return COLOR_STOPS[COLOR_STOPS.length - 1][1];
+    }
+
+    // ---- header ----
+    document.getElementById("current-time").textContent =
+      new Date().toISOString().slice(0, 16).replace("T", " ");
+
+    // ---- colorbar ----
+    (function drawColorbar() {
+      const cb = document.getElementById("colorbar");
+      const ctx = cb.getContext("2d");
+      const w = cb.width;
+      for (let x = 0; x < w; x++) {
+        const [r, g, b] = colorFor((x / (w - 1)) * COLOR_MAX);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, 0, 1, cb.height);
+      }
+    })();
+
+    // ---- map ----
+    const map = L.map("map", { zoomControl: true, minZoom: 4, maxZoom: 10 }).setView([48, 8], 4);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+      subdomains: "abc",
+      className: "osm-gray",
+    }).addTo(map);
+
+    const leadSelect = document.getElementById("lead-select");
+    const opacitySlider = document.getElementById("opacity");
+    const statusEl = document.getElementById("status");
+
+    if (typeof forecastMeta === "undefined") {
+      statusEl.textContent = "Forecast metadata not available yet.";
+    } else {
+      const { date, cycle, leads, grid, tiles } = forecastMeta;
+      const bounds = [[grid.latMin, grid.lonMin], [grid.latMax, grid.lonMax]];
+      map.fitBounds(bounds, { padding: [10, 10], animate: false });
+
+      document.getElementById("forecast-time").textContent =
+        `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)} ${cycle}:00`;
+
+      leads.forEach((lead) => {
+        const opt = document.createElement("option");
+        opt.value = lead;
+        opt.textContent = `+${parseInt(lead.slice(1), 10)}h`;
+        leadSelect.appendChild(opt);
+      });
+
+      // Pre-rendered wind tiles (slippy-map XYZ). Nodata pixels are transparent,
+      // so the grayscale OSM basemap shows through where there is no data.
+      // Two sources: high-res 5km downscale (tiles/) and low-res GFS (tiles_gfs/).
+      const srcHrBtn = document.getElementById("src-hr");
+      const srcGfsBtn = document.getElementById("src-gfs");
+      let windSource = "hr";
+      const tileUrl = (lead, source) =>
+        `${source === "gfs" ? "tiles_gfs" : "tiles"}/${date}_${cycle}/${lead}/{z}/{x}/{y}.png`;
+      const windLayer = L.tileLayer(tileUrl(leads[0], windSource), {
+        minZoom: tiles.minZoom,
+        maxZoom: 10,
+        maxNativeZoom: tiles.maxZoom,
+        tileSize: tiles.tileSize,
+        bounds: bounds,
+        opacity: parseFloat(opacitySlider.value),
+      }).addTo(map);
+
+      const setSource = (source) => {
+        windSource = source;
+        srcHrBtn.classList.toggle("active", source === "hr");
+        srcGfsBtn.classList.toggle("active", source === "gfs");
+        windLayer.setUrl(tileUrl(leadSelect.value, source));
+      };
+      srcHrBtn.addEventListener("click", () => setSource("hr"));
+      srcGfsBtn.addEventListener("click", () => setSource("gfs"));
+
+      leadSelect.addEventListener("change", () => {
+        windLayer.setUrl(tileUrl(leadSelect.value, windSource));
+      });
+      opacitySlider.addEventListener("input", () => {
+        windLayer.setOpacity(parseFloat(opacitySlider.value));
+      });
+    }
+  </script>
+</body>
+</html>
